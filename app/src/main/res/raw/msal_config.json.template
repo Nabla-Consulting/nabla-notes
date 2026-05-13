@@ -1,0 +1,15 @@
+{
+  "client_id": "YOUR_CLIENT_ID_HERE",
+  "authorization_user_agent": "DEFAULT",
+  "redirect_uri": "msauth://com.nabla.notes/YOUR_SIGNATURE_HASH_URL_ENCODED",
+  "account_mode": "SINGLE",
+  "broker_redirect_uri_registered": false,
+  "authorities": [
+    {
+      "type": "AAD",
+      "audience": {
+        "type": "PersonalMicrosoftAccount"
+      }
+    }
+  ]
+}

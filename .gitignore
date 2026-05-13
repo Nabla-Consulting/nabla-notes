@@ -1,0 +1,31 @@
+# Build outputs
+*.iml
+.gradle
+/build
+**/build/
+/captures
+.externalNativeBuild
+.cxx
+
+# IDE
+/.idea
+.DS_Store
+*.ipr
+*.iws
+
+# SECRETS — never commit these
+local.properties
+/local.properties
+
+# MSAL config has real client_id — use msal_config.json.template instead
+app/src/main/res/raw/msal_config.json
+
+# Keystores and signing configs
+*.jks
+*.keystore
+keystore.properties
+release.properties
+
+# Gradle caches
+.gradle/
+.kotlin/

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">nabla notes</string>
+    <string name="sign_in">Sign in with Microsoft</string>
+    <string name="sign_out">Sign out</string>
+    <string name="loading">Loading…</string>
+    <string name="no_files">No .txt or .md files in this folder</string>
+    <string name="settings">Settings</string>
+    <string name="folder_path">OneDrive folder path</string>
+    <string name="save">Save</string>
+    <string name="edit">Edit</string>
+    <string name="preview">Preview</string>
+    <string name="new_file">New file</string>
+    <string name="file_name">File name</string>
+    <string name="create">Create</string>
+    <string name="cancel">Cancel</string>
+    <string name="back">Back</string>
+    <string name="saved">Saved</string>
+    <string name="error_loading">Error loading files</string>
+    <string name="error_saving">Error saving file</string>
+</resources>
