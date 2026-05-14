@@ -139,16 +139,22 @@ fun SettingsScreen(
             SettingsSectionHeader(title = "About")
 
             SettingsRow(
-                label = "Version",
-                value = BuildConfig.VERSION_NAME
-            )
-
-            SettingsRow(
                 label = "App",
                 value = "nabla notes"
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text(
+                text = "v${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 
