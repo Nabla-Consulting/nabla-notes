@@ -3,18 +3,23 @@ package com.nabla.notes.ui.editor
 import android.app.Activity
 import android.widget.TextView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +29,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -37,10 +44,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nabla.notes.model.MarkdownAction
 import com.nabla.notes.model.NoteFile
 import com.nabla.notes.viewmodel.EditorUiState
 import com.nabla.notes.viewmodel.EditorViewModel
@@ -60,7 +69,7 @@ fun EditorScreen(
     viewModel: EditorViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val content by viewModel.content.collectAsState()
+    val textFieldValue by viewModel.textFieldValue.collectAsState()
     val isMarkdownPreview by viewModel.isMarkdownPreview.collectAsState()
     val activity = LocalContext.current as Activity
     val snackbarHostState = remember { SnackbarHostState() }
@@ -70,7 +79,7 @@ fun EditorScreen(
         viewModel.loadFile(noteFile, activity)
     }
 
-    // Show "Saved" snackbar
+    // Show "Saved" snackbar on explicit (non-silent) save
     LaunchedEffect(uiState) {
         if (uiState is EditorUiState.Saved) {
             snackbarHostState.showSnackbar("Saved")
@@ -80,7 +89,7 @@ fun EditorScreen(
     val hasUnsaved = viewModel.hasUnsavedChanges
     val titleText = buildString {
         append(noteFile.name)
-        if (hasUnsaved) append(" ●")
+        if (hasUnsaved) append(" \u25CF")
     }
 
     Scaffold(
@@ -113,39 +122,17 @@ fun EditorScreen(
                             )
                         }
                     }
-
-                    // Save button / spinner
-                    when (uiState) {
-                        is EditorUiState.Saving -> {
-                            CircularProgressIndicator(
-                                modifier = Modifier
-                                    .padding(horizontal = 12.dp)
-                                    .then(Modifier.padding(4.dp)),
-                                strokeWidth = 2.dp
-                            )
-                        }
-                        else -> {
-                            IconButton(
-                                onClick = { viewModel.saveFile(activity) },
-                                enabled = uiState is EditorUiState.Ready || uiState is EditorUiState.Saved
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Save,
-                                    contentDescription = "Save"
-                                )
-                            }
-                        }
-                    }
                 }
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
+        // No imePadding here — applied to the content Column instead so the
+        // toolbar hugs the keyboard edge without an extra gap.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .imePadding()
         ) {
             when (val state = uiState) {
                 is EditorUiState.Idle,
@@ -166,22 +153,36 @@ fun EditorScreen(
                 is EditorUiState.Ready,
                 is EditorUiState.Saving,
                 is EditorUiState.Saved -> {
-                    if (isMarkdownPreview) {
-                        MarkdownPreview(
-                            content = content,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                    } else {
-                        NoteEditor(
-                            content = content,
-                            onContentChange = { viewModel.updateContent(it) },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.surface)
-                        )
+                    // imePadding on Column: the whole column shifts up with the keyboard,
+                    // so the toolbar lands right above it with no extra space.
+                    Column(modifier = Modifier.fillMaxSize().imePadding()) {
+                        if (isMarkdownPreview) {
+                            MarkdownPreview(
+                                content = textFieldValue.text,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                            )
+                        } else {
+                            NoteEditor(
+                                textFieldValue = textFieldValue,
+                                onValueChange = { viewModel.updateTextFieldValue(it, activity) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(MaterialTheme.colorScheme.surface)
+                            )
+                            // Toolbar only visible in edit mode
+                            MarkdownToolbar(
+                                onAction = { action ->
+                                    when (action) {
+                                        MarkdownAction.UNDO -> viewModel.undo()
+                                        MarkdownAction.REDO -> viewModel.redo()
+                                        else -> viewModel.insertMarkdown(action)
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -193,15 +194,15 @@ fun EditorScreen(
 
 @Composable
 private fun NoteEditor(
-    content: String,
-    onContentChange: (String) -> Unit,
+    textFieldValue: TextFieldValue,
+    onValueChange: (TextFieldValue) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
 
     BasicTextField(
-        value = content,
-        onValueChange = onContentChange,
+        value = textFieldValue,
+        onValueChange = onValueChange,
         modifier = modifier
             .verticalScroll(scrollState)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 300.dp),
@@ -212,9 +213,9 @@ private fun NoteEditor(
         ),
         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
         decorationBox = { innerTextField ->
-            if (content.isEmpty()) {
+            if (textFieldValue.text.isEmpty()) {
                 Text(
-                    text = "Start writing…",
+                    text = "Start writing\u2026",
                     style = TextStyle(
                         fontFamily = FontFamily.Monospace,
                         fontSize = 14.sp,
@@ -225,6 +226,39 @@ private fun NoteEditor(
             innerTextField()
         }
     )
+}
+
+// ─── Markdown Toolbar ─────────────────────────────────────────────────────────
+
+@Composable
+private fun MarkdownToolbar(
+    onAction: (MarkdownAction) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        tonalElevation = 2.dp,
+        shadowElevation = 4.dp
+    ) {
+        LazyRow(
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            items(MarkdownAction.entries.toList()) { action ->
+                TextButton(
+                    onClick = { onAction(action) },
+                    modifier = Modifier.defaultMinSize(minWidth = 40.dp, minHeight = 36.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = action.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontFamily = if (action == MarkdownAction.CODE_BLOCK) FontFamily.Monospace else FontFamily.Default
+                    )
+                }
+            }
+        }
+    }
 }
 
 // ─── Markdown Preview ─────────────────────────────────────────────────────────
