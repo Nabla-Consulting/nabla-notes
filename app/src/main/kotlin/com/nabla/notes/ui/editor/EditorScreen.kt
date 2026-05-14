@@ -48,6 +48,8 @@ import io.noties.markwon.Markwon
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
+import io.noties.markwon.image.glide.GlideImagesPlugin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -238,6 +240,8 @@ private fun MarkdownPreview(
             .usePlugin(TablePlugin.create(context))
             .usePlugin(TaskListPlugin.create(context))
             .usePlugin(StrikethroughPlugin.create())
+            .usePlugin(LinkifyPlugin.create())
+            .usePlugin(GlideImagesPlugin.create(context))
             .build()
     }
 

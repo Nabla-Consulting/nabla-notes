@@ -113,6 +113,9 @@ dependencies {
     implementation(libs.markwon.tables)
     implementation(libs.markwon.tasklist)
     implementation(libs.markwon.strikethrough)
+    implementation(libs.markwon.linkify)
+    implementation(libs.markwon.image)
+    implementation(libs.markwon.image.glide)
 
     // DataStore
     implementation(libs.datastore.preferences)
