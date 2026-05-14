@@ -1,6 +1,7 @@
 package com.nabla.notes.ui.browser
 
 import android.app.Activity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +81,11 @@ fun FileBrowserScreen(
     val currentPath by viewModel.currentPath.collectAsState()
     val folderStack by viewModel.folderStack.collectAsState()
     val activity = LocalContext.current as Activity
+
+    // Intercept back button when inside a subfolder — navigate up instead of exiting
+    BackHandler(enabled = folderStack.isNotEmpty()) {
+        viewModel.navigateUp(activity)
+    }
     val snackbarHostState = remember { SnackbarHostState() }
     var showCreateDialog by remember { mutableStateOf(false) }
     var fileToDelete by remember { mutableStateOf<NoteFile?>(null) }
