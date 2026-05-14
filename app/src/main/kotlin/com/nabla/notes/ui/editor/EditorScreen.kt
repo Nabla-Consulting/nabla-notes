@@ -45,6 +45,9 @@ import com.nabla.notes.model.NoteFile
 import com.nabla.notes.viewmodel.EditorUiState
 import com.nabla.notes.viewmodel.EditorViewModel
 import io.noties.markwon.Markwon
+import io.noties.markwon.ext.tables.TablePlugin
+import io.noties.markwon.ext.tasklist.TaskListPlugin
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -230,7 +233,13 @@ private fun MarkdownPreview(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    val markwon = remember { Markwon.create(context) }
+    val markwon = remember {
+        Markwon.builder(context)
+            .usePlugin(TablePlugin.create(context))
+            .usePlugin(TaskListPlugin.create(context))
+            .usePlugin(StrikethroughPlugin.create())
+            .build()
+    }
 
     AndroidView(
         factory = { ctx ->

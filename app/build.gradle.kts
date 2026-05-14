@@ -110,6 +110,9 @@ dependencies {
 
     // Markdown rendering
     implementation(libs.markwon.core)
+    implementation(libs.markwon.tables)
+    implementation(libs.markwon.tasklist)
+    implementation(libs.markwon.strikethrough)
 
     // DataStore
     implementation(libs.datastore.preferences)
