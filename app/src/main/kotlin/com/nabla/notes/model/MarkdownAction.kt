@@ -1,4 +1,4 @@
-package com.nabla.notes.model
+﻿package com.nabla.notes.model
 
 enum class MarkdownAction(
     val label: String,
@@ -23,5 +23,6 @@ enum class MarkdownAction(
     HR(            "\u2014",    "\n---\n",""),
     LINK(          "\uD83D\uDD17",  "[",  "](url)",  placeholder = "text"),
     IMAGE(         "\uD83D\uDDBC",  "![", "](url)",  placeholder = "alt"),
+    HIGHLIGHT(     "\uD83D\uDD8D", "<mark>", "</mark>", placeholder = "text"),
     TABLE(         "\u229E",    "\n| Col1 | Col2 | Col3 |\n|------|------|------|\n|      |      |      |\n|      |      |      |\n|      |      |      |\n", ""),
 }

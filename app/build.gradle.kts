@@ -22,7 +22,7 @@ android {
         applicationId = "com.nabla.notes"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
+        versionCode = 2026052701
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -116,6 +116,7 @@ dependencies {
     implementation(libs.markwon.linkify)
     implementation(libs.markwon.image)
     implementation(libs.markwon.image.glide)
+    implementation(libs.markwon.html)
 
     // DataStore
     implementation(libs.datastore.preferences)

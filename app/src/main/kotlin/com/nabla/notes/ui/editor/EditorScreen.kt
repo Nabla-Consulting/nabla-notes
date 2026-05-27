@@ -1,15 +1,25 @@
 package com.nabla.notes.ui.editor
 
 import android.app.Activity
+import android.graphics.Bitmap
 import android.widget.TextView
+import android.text.style.BackgroundColorSpan
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -37,10 +47,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -48,17 +70,57 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.bumptech.glide.Glide
 import com.nabla.notes.model.MarkdownAction
 import com.nabla.notes.model.NoteFile
 import com.nabla.notes.viewmodel.EditorUiState
 import com.nabla.notes.viewmodel.EditorViewModel
 import io.noties.markwon.Markwon
+import io.noties.markwon.MarkwonVisitor
+import io.noties.markwon.SpannableBuilder
+import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
 import io.noties.markwon.ext.tables.TablePlugin
 import io.noties.markwon.ext.tasklist.TaskListPlugin
-import io.noties.markwon.ext.strikethrough.StrikethroughPlugin
-import io.noties.markwon.linkify.LinkifyPlugin
+import io.noties.markwon.html.HtmlPlugin
+import io.noties.markwon.html.HtmlTag
+import io.noties.markwon.html.MarkwonHtmlRenderer
+import io.noties.markwon.html.TagHandler
 import io.noties.markwon.image.glide.GlideImagesPlugin
+import io.noties.markwon.linkify.LinkifyPlugin
+
+// ── Markdown segment model ────────────────────────────────────────────────────
+
+private sealed class MarkdownSegment {
+    data class Text(val content: String) : MarkdownSegment()
+    data class Mermaid(val diagram: String, val encoded: String) : MarkdownSegment()
+}
+
+private fun splitMarkdownSegments(content: String): List<MarkdownSegment> {
+    val segments = mutableListOf<MarkdownSegment>()
+    val regex = Regex("""```mermaid\s*\n(.*?)\n```""", RegexOption.DOT_MATCHES_ALL)
+    var lastEnd = 0
+    for (match in regex.findAll(content)) {
+        if (match.range.first > lastEnd) {
+            segments.add(MarkdownSegment.Text(content.substring(lastEnd, match.range.first)))
+        }
+        val diagram = match.groupValues[1].trim()
+        val encoded = android.util.Base64.encodeToString(
+            diagram.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
+        )
+        segments.add(MarkdownSegment.Mermaid(diagram, encoded))
+        lastEnd = match.range.last + 1
+    }
+    if (lastEnd < content.length) {
+        segments.add(MarkdownSegment.Text(content.substring(lastEnd)))
+    }
+    return segments
+}
+
+// ── Editor Screen ─────────────────────────────────────────────────────────────
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,6 +135,7 @@ fun EditorScreen(
     val isMarkdownPreview by viewModel.isMarkdownPreview.collectAsState()
     val activity = LocalContext.current as Activity
     val snackbarHostState = remember { SnackbarHostState() }
+    val coroutineScope = rememberCoroutineScope()
 
     // Load file on first composition or when file changes
     LaunchedEffect(noteFile.id) {
@@ -90,6 +153,19 @@ fun EditorScreen(
     val titleText = buildString {
         append(noteFile.name)
         if (hasUnsaved) append(" \u25CF")
+    }
+
+    // Long-tap handler passed down to mermaid diagram composables
+    val onSaveToGallery: (String) -> Unit = { url ->
+        coroutineScope.launch {
+            viewModel.saveSingleDiagram(url) { success ->
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar(
+                        if (success) "Diagram saved to gallery" else "Failed to save diagram"
+                    )
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -127,8 +203,6 @@ fun EditorScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
-        // No imePadding here — applied to the content Column instead so the
-        // toolbar hugs the keyboard edge without an extra gap.
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -159,6 +233,7 @@ fun EditorScreen(
                         if (isMarkdownPreview) {
                             MarkdownPreview(
                                 content = textFieldValue.text,
+                                onSaveToGallery = onSaveToGallery,
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(MaterialTheme.colorScheme.surface)
@@ -190,7 +265,132 @@ fun EditorScreen(
     }
 }
 
-// ─── Plain Text Editor ────────────────────────────────────────────────────────
+// ── Mermaid diagram composable ────────────────────────────────────────────────
+
+@Composable
+private fun MermaidDiagramView(
+    encoded: String,
+    onSaveToGallery: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val url = "https://mermaid.ink/img/$encoded"
+    val context = LocalContext.current
+    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
+    var loadFailed by remember(url) { mutableStateOf(false) }
+    var showFullscreen by remember { mutableStateOf(false) }
+
+    LaunchedEffect(url) {
+        bitmap = null
+        loadFailed = false
+        val appContext = context.applicationContext
+        val result = withContext(Dispatchers.IO) {
+            try {
+                Glide.with(appContext)
+                    .asBitmap()
+                    .load(url)
+                    .submit()
+                    .get()
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (result != null) bitmap = result else loadFailed = true
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 80.dp)
+            .pointerInput(url) {
+                detectTapGestures(
+                    onTap = { _ -> showFullscreen = true },
+                    onLongPress = { _ -> onSaveToGallery(url) }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        when {
+            bitmap != null -> Image(
+                bitmap = bitmap!!.asImageBitmap(),
+                contentDescription = "Mermaid diagram",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxWidth()
+            )
+            loadFailed -> Text(
+                text = "⚠ Failed to load diagram",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(16.dp)
+            )
+            else -> CircularProgressIndicator()
+        }
+    }
+
+    if (showFullscreen) {
+        bitmap?.let { bmp ->
+            ZoomableImageDialog(
+                bitmap = bmp,
+                onDismiss = { showFullscreen = false }
+            )
+        }
+    }
+}
+
+// ── Fullscreen zoomable dialog ────────────────────────────────────────────────
+
+@Composable
+private fun ZoomableImageDialog(
+    bitmap: Bitmap,
+    onDismiss: () -> Unit
+) {
+    var scale by remember { mutableStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    val transformableState = rememberTransformableState { zoomChange, panChange, _ ->
+        scale = (scale * zoomChange).coerceIn(0.5f, 5f)
+        offset += panChange
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        // Outer box — tap the black background to dismiss
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.92f))
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { _ -> onDismiss() })
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Mermaid diagram fullscreen",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offset.x,
+                        translationY = offset.y
+                    )
+                    .transformable(transformableState)
+                    // Consume taps on the image so they don't dismiss the dialog
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { /* absorb click */ }
+            )
+        }
+    }
+}
+
+// ── Plain Text Editor ─────────────────────────────────────────────────────────
 
 @Composable
 private fun NoteEditor(
@@ -228,7 +428,7 @@ private fun NoteEditor(
     )
 }
 
-// ─── Markdown Toolbar ─────────────────────────────────────────────────────────
+// ── Markdown Toolbar ──────────────────────────────────────────────────────────
 
 @Composable
 private fun MarkdownToolbar(
@@ -261,11 +461,12 @@ private fun MarkdownToolbar(
     }
 }
 
-// ─── Markdown Preview ─────────────────────────────────────────────────────────
+// ── Markdown Preview ──────────────────────────────────────────────────────────
 
 @Composable
 private fun MarkdownPreview(
     content: String,
+    onSaveToGallery: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -276,22 +477,75 @@ private fun MarkdownPreview(
             .usePlugin(StrikethroughPlugin.create())
             .usePlugin(LinkifyPlugin.create())
             .usePlugin(GlideImagesPlugin.create(context))
+            .usePlugin(HtmlPlugin.create { plugin ->
+                plugin.addHandler(object : TagHandler() {
+                    override fun supportedTags() = listOf("mark")
+                    override fun handle(
+                        visitor: MarkwonVisitor,
+                        renderer: MarkwonHtmlRenderer,
+                        tag: HtmlTag
+                    ) {
+                        // <mark> is treated as a block tag by Markwon's HTML parser
+                        // (not in its INLINE_TAGS set). Visit child tags to apply nested
+                        // formatting (e.g., <mark><b>bold</b></mark>).
+                        if (tag.isBlock) {
+                            visitChildren(visitor, renderer, tag.getAsBlock())
+                        }
+                        // Text content is already in the builder; start/end are valid.
+                        val start = tag.start()
+                        val end = tag.end()
+                        if (start < end) {
+                            SpannableBuilder.setSpans(
+                                visitor.builder(),
+                                BackgroundColorSpan(0xFFFFE000.toInt()),
+                                start,
+                                end
+                            )
+                        }
+                    }
+                })
+            })
             .build()
     }
 
-    AndroidView(
-        factory = { ctx ->
-            TextView(ctx).apply {
-                setPadding(0, 0, 0, 0)
-                textSize = 15f
-            }
-        },
-        update = { textView ->
-            markwon.setMarkdown(textView, content)
-        },
+    val segments = remember(content) { splitMarkdownSegments(content) }
+
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .verticalScroll(rememberScrollState())
-            .padding(bottom = 300.dp)
-    )
+    ) {
+        segments.forEach { segment ->
+            when (segment) {
+                is MarkdownSegment.Text -> {
+                    if (segment.content.isNotBlank()) {
+                        AndroidView(
+                            factory = { ctx ->
+                                TextView(ctx).apply {
+                                    setPadding(0, 0, 0, 0)
+                                    textSize = 15f
+                                    setTextIsSelectable(true)
+                                }
+                            },
+                            update = { textView ->
+                                markwon.setMarkdown(textView, segment.content)
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+                is MarkdownSegment.Mermaid -> {
+                    MermaidDiagramView(
+                        encoded = segment.encoded,
+                        onSaveToGallery = onSaveToGallery,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                    )
+                }
+            }
+        }
+        // Extra space at the bottom so content clears the keyboard / nav bar
+        Spacer(modifier = Modifier.height(300.dp))
+    }
 }

@@ -11,12 +11,14 @@ import com.nabla.notes.model.NoteFile
 import com.nabla.notes.repository.OneDriveRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /** UI state for the editor screen. */
@@ -204,6 +206,62 @@ class EditorViewModel @Inject constructor(
         _isMarkdownPreview.value = !_isMarkdownPreview.value
     }
 
+    /** True when content contains at least one mermaid fenced block. */
+    fun hasMermaidDiagrams(): Boolean {
+        val text = _textFieldValue.value.text
+        return text.contains("```mermaid", ignoreCase = true)
+    }
+
+    /**
+     * Download all mermaid diagrams from mermaid.ink and save them to the
+     * device gallery via MediaStore. Runs network I/O on Dispatchers.IO.
+     * [onResult] is invoked on the calling coroutine dispatcher (main) with
+     * (saved, failed) counts.
+     */
+    fun saveMermaidDiagrams(context: Context, onResult: (saved: Int, failed: Int) -> Unit) {
+        viewModelScope.launch {
+            val content = _textFieldValue.value.text
+            val regex = Regex("""```mermaid\s*\n(.*?)\n```""", RegexOption.DOT_MATCHES_ALL)
+            val diagrams = regex.findAll(content).map { it.groupValues[1].trim() }.toList()
+            if (diagrams.isEmpty()) { onResult(0, 0); return@launch }
+
+            var saved = 0
+            var failed = 0
+            withContext(Dispatchers.IO) {
+                val client = okhttp3.OkHttpClient()
+                for ((index, diagram) in diagrams.withIndex()) {
+                    try {
+                        val encoded = android.util.Base64.encodeToString(
+                            diagram.toByteArray(Charsets.UTF_8),
+                            android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
+                        )
+                        val url = "https://mermaid.ink/img/$encoded"
+                        val request = okhttp3.Request.Builder().url(url).build()
+                        val bytes = client.newCall(request).execute().use { it.body?.bytes() }
+                            ?: throw Exception("Empty response")
+
+                        val filename = "mermaid_${System.currentTimeMillis()}_$index.png"
+                        val values = android.content.ContentValues().apply {
+                            put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
+                            put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "Pictures/NablaNotes")
+                            }
+                        }
+                        val uri = context.contentResolver.insert(
+                            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+                        ) ?: throw Exception("Could not create MediaStore entry")
+                        context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                        saved++
+                    } catch (e: Exception) {
+                        failed++
+                    }
+                }
+            }
+            onResult(saved, failed)
+        }
+    }
+
     /**
      * Insert markdown formatting at the current cursor position or around the current selection.
      *
@@ -240,6 +298,43 @@ class EditorViewModel @Inject constructor(
         }
 
         _textFieldValue.value = newValue
+    }
+
+    /**
+     * Download a single mermaid diagram image from [url] and save it to the gallery.
+     * Uses the injected application context — no Activity reference needed.
+     */
+    fun saveSingleDiagram(url: String, onResult: (Boolean) -> Unit) {
+        viewModelScope.launch {
+            var success = false
+            withContext(Dispatchers.IO) {
+                try {
+                    val client = okhttp3.OkHttpClient()
+                    val request = okhttp3.Request.Builder().url(url).build()
+                    val bytes = client.newCall(request).execute().use { it.body?.bytes() }
+                        ?: throw Exception("Empty response")
+                    val filename = "mermaid_${System.currentTimeMillis()}.png"
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
+                        put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            put(
+                                android.provider.MediaStore.Images.Media.RELATIVE_PATH,
+                                "Pictures/NablaNotes"
+                            )
+                        }
+                    }
+                    val uri = context.contentResolver.insert(
+                        android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values
+                    ) ?: throw Exception("Could not create MediaStore entry")
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    success = true
+                } catch (_: Exception) {
+                    // success stays false
+                }
+            }
+            onResult(success)
+        }
     }
 
     /**

@@ -62,6 +62,7 @@ markwon-strikethrough = { group = "io.noties.markwon", name = "ext-strikethrough
 markwon-linkify = { group = "io.noties.markwon", name = "linkify", version.ref = "markwon" }
 markwon-image = { group = "io.noties.markwon", name = "image", version.ref = "markwon" }
 markwon-image-glide = { group = "io.noties.markwon", name = "image-glide", version.ref = "markwon" }
+markwon-html = { group = "io.noties.markwon", name = "html", version.ref = "markwon" }
 
 # DataStore (persistent settings)
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
