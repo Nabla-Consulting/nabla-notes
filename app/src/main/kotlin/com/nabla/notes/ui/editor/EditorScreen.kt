@@ -30,6 +30,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -161,7 +162,7 @@ fun EditorScreen(
             viewModel.saveSingleDiagram(url) { success ->
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar(
-                        if (success) "Diagram saved to gallery" else "Failed to save diagram"
+                        if (success) "Diagrama guardado en galería" else "Error al guardar diagrama"
                     )
                 }
             }
@@ -329,6 +330,8 @@ private fun MermaidDiagramView(
         bitmap?.let { bmp ->
             ZoomableImageDialog(
                 bitmap = bmp,
+                url = url,
+                onSaveToGallery = onSaveToGallery,
                 onDismiss = { showFullscreen = false }
             )
         }
@@ -340,6 +343,8 @@ private fun MermaidDiagramView(
 @Composable
 private fun ZoomableImageDialog(
     bitmap: Bitmap,
+    url: String,
+    onSaveToGallery: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var scale by remember { mutableStateOf(1f) }
@@ -380,12 +385,28 @@ private fun ZoomableImageDialog(
                         translationY = offset.y
                     )
                     .transformable(transformableState)
-                    // Consume taps on the image so they don't dismiss the dialog
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) { /* absorb click */ }
+                    // Consume taps; long press saves to gallery
+                    .pointerInput(url) {
+                        detectTapGestures(
+                            onTap = { /* absorb — prevents dismiss */ },
+                            onLongPress = { _ -> onSaveToGallery(url) }
+                        )
+                    }
             )
+
+            // Close (X) button — top-right corner
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Cerrar",
+                    tint = Color.White
+                )
+            }
         }
     }
 }
