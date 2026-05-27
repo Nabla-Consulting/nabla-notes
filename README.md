@@ -1,52 +1,58 @@
-# nabla notes
+# Nabla Notes
 
-A minimalist Android note-taking app backed by OneDrive. Write plain text and Markdown notes, synced to your Microsoft account via OneDrive.
+A minimalist Android note-taking app backed by OneDrive. Write plain text and Markdown notes — including Mermaid diagrams — synced to your Microsoft account.
 
 ---
 
 ## Features
 
-- **OneDrive sync** — notes stored in a configurable OneDrive folder
-- **Markdown rendering** — live preview for `.md` files using Markwon
-- **Foldable / tablet support** — split-pane layout on `MEDIUM`/`EXPANDED` window sizes
-- **MSAL authentication** — secure sign-in with Microsoft personal or work accounts
-- **Material You** — dynamic colour scheme on Android 12+
-- **Offline-first editing** — edit locally, save when ready
+- **OneDrive sync** — notes stored in a configurable OneDrive folder via Microsoft Graph API
+- **Markdown rendering** — live preview for `.md` files using Markwon (headings, bold, lists, code blocks, links)
+- **Mermaid diagrams** — render flowcharts, sequence diagrams, and more inline
+  - Fills full screen width
+  - Tap → fullscreen view with pinch-to-zoom
+  - Long-press → save diagram as PNG to gallery
+- **Rich Markdown toolbar** — bold, italic, headings, lists, checkboxes, code blocks, tables, undo/redo
+- **Autosave** — 2-second debounce, no save button needed
+- **Foldable / tablet support** — split-pane layout on medium/expanded window sizes
+- **MSAL authentication** — secure sign-in with Microsoft personal accounts
+- **Material You** — dynamic color on Android 12+
 
 ---
 
 ## Requirements
 
-- **Android Studio Hedgehog** (2023.1.1) or newer
-- **JDK 17** (bundled with Android Studio)
-- **Android SDK 35** (compile) / **minSdk 26**
-- **Azure AD app registration** (see below)
+- Android 8.0+ (API 26+)
+- Microsoft personal account with OneDrive
+- Azure AD app registration (shared across Nabla apps — see below)
 
 ---
 
-## Build Instructions
+## Build
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
-git clone <repo-url>
-cd android-notepad
+git clone https://github.com/Nabla-Consulting/nabla-notes.git
+cd nabla-notes
 ```
 
 ### 2. Create `local.properties`
 
-In the project root (next to `settings.gradle.kts`), create `local.properties` with:
-
 ```properties
-sdk.dir=/path/to/Android/sdk
+sdk.dir=/path/to/Android/Sdk
 msal.clientId=<YOUR_AZURE_CLIENT_ID>
 ```
 
 > `local.properties` is git-ignored and never committed.
 
-### 3. Configure `msal_config.json`
+### 3. Create `msal_config.json`
 
-The file `app/src/main/res/raw/msal_config.json` must contain the **literal** client ID string (it cannot reference BuildConfig at runtime):
+Copy the template and fill in your values:
+
+```bash
+cp msal_config.template.json app/src/main/res/raw/msal_config.json
+```
 
 ```json
 {
@@ -64,65 +70,58 @@ The file `app/src/main/res/raw/msal_config.json` must contain the **literal** cl
 }
 ```
 
-Replace `<YOUR_SIGNATURE_HASH>` with your actual signing certificate hash (see below).
-
-### 4. Build the APK
+### 4. Build
 
 ```bash
 ./gradlew assembleDebug
-# Output: app/build/outputs/apk/debug/app-debug.apk
+# APK: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 ---
 
 ## Azure AD App Registration
 
-The app registration ID is `<YOUR_AZURE_CLIENT_ID>`.
-
-You must register the Android redirect URI in the Azure portal:
-
 1. Go to [Azure Portal → App Registrations](https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/RegisteredApps)
-2. Open the app registration for `<YOUR_AZURE_CLIENT_ID>`
+2. Open (or create) the shared Nabla app registration
 3. Navigate to **Authentication → Add a platform → Android**
-4. Set **Package name**: `com.nabla.notes`
-5. Set **Signature hash**: (see below)
-6. Copy the generated redirect URI — it looks like:  
-   `msauth://com.nabla.notes/<BASE64_HASH>`
-7. Paste that URI into `msal_config.json` as `redirect_uri`
-
-### Getting the Signature Hash
-
-**Debug keystore (development):**
-
-```bash
-keytool -exportcert \
-  -alias androiddebugkey \
-  -keystore ~/.android/debug.keystore \
-  | openssl sha1 -binary \
-  | openssl base64
-```
-
-Default debug keystore password: `android`
-
-**Release keystore:**
-
-```bash
-keytool -exportcert \
-  -alias <your-alias> \
-  -keystore /path/to/release.keystore \
-  | openssl sha1 -binary \
-  | openssl base64
-```
+4. Package name: `com.nabla.notes`
+5. Signature hash (debug):
+   ```bash
+   keytool -exportcert -alias androiddebugkey \
+     -keystore ~/.android/debug.keystore \
+     | openssl sha1 -binary | openssl base64
+   ```
+6. Copy the generated redirect URI into `msal_config.json`
 
 ---
 
 ## First-Time Setup (In-App)
 
-1. Launch the app and tap **Sign in with Microsoft**
+1. Launch the app → tap **Sign in with Microsoft**
 2. Complete the Microsoft sign-in flow
-3. Open **Settings** (gear icon in the top bar)
-4. Tap **Change Folder** and select the OneDrive folder where your notes live
-5. Navigate back — your notes will load automatically
+3. Open **Settings** (gear icon)
+4. Tap **Change Folder** → select the OneDrive folder where your notes live
+5. Navigate back — notes load automatically
+
+---
+
+## Mermaid Diagrams
+
+In any `.md` note, write a fenced code block with `mermaid`:
+
+````
+```mermaid
+graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do it]
+    B -->|No| D[Skip]
+```
+````
+
+The diagram renders inline in the editor preview.
+
+- **Single tap** → opens fullscreen view with pinch-to-zoom and a close button
+- **Long-press** → saves the diagram as a PNG to your device gallery ("Diagrama guardado en galería")
 
 ---
 
@@ -130,10 +129,8 @@ keytool -exportcert \
 
 ```
 app/src/main/kotlin/com/nabla/notes/
-├── MainActivity.kt               # Entry point, single/split pane routing
+├── MainActivity.kt               # Entry point, single/split-pane routing
 ├── NotepadApp.kt                 # Application class (Hilt)
-├── auth/
-│   └── MsalManager.kt            # MSAL auth wrapper
 ├── di/
 │   └── AppModule.kt              # Hilt dependency graph
 ├── model/
@@ -146,28 +143,50 @@ app/src/main/kotlin/com/nabla/notes/
 │   ├── browser/
 │   │   └── FileBrowserScreen.kt  # File list + create dialog
 │   ├── editor/
-│   │   └── EditorScreen.kt       # Text / Markdown editor
+│   │   └── EditorScreen.kt       # Text / Markdown + Mermaid editor
 │   ├── settings/
 │   │   └── SettingsScreen.kt     # Folder picker + sign-out
 │   └── theme/
 │       └── NotepadTheme.kt       # Material You theme
+├── auth/
+│   └── MsalManager.kt            # MSAL auth wrapper
 └── viewmodel/
-    ├── BrowserViewModel.kt       # File list state
-    ├── EditorViewModel.kt        # Editor state + CRUD
-    └── SettingsViewModel.kt      # Settings state
+    ├── BrowserViewModel.kt
+    ├── EditorViewModel.kt
+    └── SettingsViewModel.kt
 ```
+
+---
+
+## Tech Stack
+
+| Component | Library |
+|-----------|---------|
+| UI | Jetpack Compose + Material3 |
+| DI | Hilt |
+| Auth | MSAL 5.x |
+| Storage | Microsoft Graph API (OkHttp) |
+| Markdown | Markwon |
+| Diagrams | Mermaid.js (WebView) |
+| Async | Coroutines + StateFlow |
+| Architecture | MVVM + Repository |
 
 ---
 
 ## Notes
 
-- **`msal_config.json` cannot use BuildConfig** — it is a static JSON resource. The client ID must be a literal string. Update both `local.properties` (for `BuildConfig.MSAL_CLIENT_ID`) and `msal_config.json` when changing environments.
-- **Debug vs Release** — the signature hash is different for debug and release builds. Register both in Azure if needed.
-- **OneDrive folder** — only `.txt` and `.md` files are shown. Configure the folder in Settings.
+- `msal_config.json` cannot use `BuildConfig` at runtime — the client ID must be a literal string. Update both `local.properties` and `msal_config.json` when changing environments.
+- Only `.txt` and `.md` files are shown in the browser. Configure the folder in Settings.
+- Gallery save requires no extra permissions on API 29+ (uses `MediaStore`).
+
+---
+
+## Version
+
+`2026.05.27.01` (versionCode `2026052701`)
 
 ---
 
 ## License
 
-Private / internal use.
-
+Private / personal use.
