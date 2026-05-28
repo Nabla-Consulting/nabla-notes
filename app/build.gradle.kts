@@ -35,6 +35,16 @@ android {
         )
     }
 
+    // APK naming: <namespace>-debug.apk for debug, <namespace>.apk for release
+    applicationVariants.all {
+        val variant = this
+        variant.outputs.all {
+            val output = this as com.android.build.gradle.internal.api.BaseVariantOutputImpl
+            val ns = android.namespace ?: applicationId
+            output.outputFileName = if (variant.buildType.name == "debug") "$ns-debug.apk" else "$ns.apk"
+        }
+    }
+
     buildTypes {
         debug {
             isDebuggable = true
