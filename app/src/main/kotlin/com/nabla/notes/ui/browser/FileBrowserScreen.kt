@@ -433,7 +433,10 @@ private fun CreateFileDialog(
     onDismiss: () -> Unit,
     onCreate: (name: String, isMarkdown: Boolean) -> Unit
 ) {
-    var fileName by remember { mutableStateOf("") }
+    var fileName by remember {
+        val today = java.time.LocalDate.now().toString() // YYYY-MM-DD
+        mutableStateOf("${today}_Note")
+    }
     var isMarkdown by remember { mutableStateOf(false) }
     var nameError by remember { mutableStateOf(false) }
 

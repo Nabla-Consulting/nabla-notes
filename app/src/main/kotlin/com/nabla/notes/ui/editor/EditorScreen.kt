@@ -7,6 +7,7 @@ import android.text.style.BackgroundColorSpan
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -49,8 +50,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -228,6 +233,7 @@ fun EditorScreen(
                 is EditorUiState.Ready,
                 is EditorUiState.Saving,
                 is EditorUiState.Saved -> {
+                    var toolbarVisible by rememberSaveable { mutableStateOf(true) }
                     // imePadding on Column: the whole column shifts up with the keyboard,
                     // so the toolbar lands right above it with no extra space.
                     Column(modifier = Modifier.fillMaxSize().imePadding()) {
@@ -247,17 +253,33 @@ fun EditorScreen(
                                 modifier = Modifier
                                     .weight(1f)
                                     .background(MaterialTheme.colorScheme.surface)
-                            )
-                            // Toolbar only visible in edit mode
-                            MarkdownToolbar(
-                                onAction = { action ->
-                                    when (action) {
-                                        MarkdownAction.UNDO -> viewModel.undo()
-                                        MarkdownAction.REDO -> viewModel.redo()
-                                        else -> viewModel.insertMarkdown(action)
+                                    .pointerInput(toolbarVisible) {
+                                        detectHorizontalDragGestures { _, dragAmount ->
+                                            if (dragAmount > 50f) toolbarVisible = true
+                                        }
                                     }
-                                }
                             )
+                            // Collapsible toolbar: swipe left to hide, swipe right on editor to show
+                            AnimatedVisibility(
+                                visible = toolbarVisible,
+                                enter = slideInVertically(initialOffsetY = { it }),
+                                exit = slideOutVertically(targetOffsetY = { it })
+                            ) {
+                                MarkdownToolbar(
+                                    onAction = { action ->
+                                        when (action) {
+                                            MarkdownAction.UNDO -> viewModel.undo()
+                                            MarkdownAction.REDO -> viewModel.redo()
+                                            else -> viewModel.insertMarkdown(action)
+                                        }
+                                    },
+                                    modifier = Modifier.pointerInput(Unit) {
+                                        detectHorizontalDragGestures { _, dragAmount ->
+                                            if (dragAmount < -50f) toolbarVisible = false
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -457,7 +479,7 @@ private fun NoteEditor(
         onValueChange = onValueChange,
         modifier = modifier
             .verticalScroll(scrollState)
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 300.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
         textStyle = TextStyle(
             fontFamily = FontFamily.Monospace,
             fontSize = 14.sp,
