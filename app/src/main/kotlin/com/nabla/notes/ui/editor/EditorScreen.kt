@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -207,7 +208,8 @@ fun EditorScreen(
                 }
             )
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) }
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0)
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -247,19 +249,29 @@ fun EditorScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                         } else {
-                            NoteEditor(
-                                textFieldValue = textFieldValue,
-                                onValueChange = { viewModel.updateTextFieldValue(it, activity) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .background(MaterialTheme.colorScheme.surface)
-                                    .pointerInput(toolbarVisible) {
-                                        detectHorizontalDragGestures { _, dragAmount ->
-                                            if (dragAmount > 50f) toolbarVisible = true
-                                        }
-                                    }
-                            )
-                            // Collapsible toolbar: swipe left to hide, swipe right on editor to show
+                            Box(modifier = Modifier.weight(1f)) {
+                                NoteEditor(
+                                    textFieldValue = textFieldValue,
+                                    onValueChange = { viewModel.updateTextFieldValue(it, activity) },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(MaterialTheme.colorScheme.surface)
+                                )
+                                // Transparent right-edge swipe zone to show toolbar
+                                if (!toolbarVisible) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.CenterEnd)
+                                            .fillMaxSize()
+                                            .pointerInput(Unit) {
+                                                detectHorizontalDragGestures { _, dragAmount ->
+                                                    if (dragAmount > 40f) toolbarVisible = true
+                                                }
+                                            }
+                                    )
+                                }
+                            }
+                            // Collapsible toolbar: swipe left to hide, swipe right (from edge) to show
                             AnimatedVisibility(
                                 visible = toolbarVisible,
                                 enter = slideInVertically(initialOffsetY = { it }),
@@ -275,7 +287,7 @@ fun EditorScreen(
                                     },
                                     modifier = Modifier.pointerInput(Unit) {
                                         detectHorizontalDragGestures { _, dragAmount ->
-                                            if (dragAmount < -50f) toolbarVisible = false
+                                            if (dragAmount < -40f) toolbarVisible = false
                                         }
                                     }
                                 )
@@ -479,7 +491,7 @@ private fun NoteEditor(
         onValueChange = onValueChange,
         modifier = modifier
             .verticalScroll(scrollState)
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 120.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
         textStyle = TextStyle(
             fontFamily = FontFamily.Monospace,
             fontSize = 14.sp,
