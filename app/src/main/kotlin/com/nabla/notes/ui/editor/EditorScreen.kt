@@ -74,7 +74,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.bumptech.glide.Glide
+import android.graphics.BitmapFactory
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import com.nabla.notes.model.MarkdownAction
 import com.nabla.notes.model.NoteFile
 import com.nabla.notes.viewmodel.EditorUiState
@@ -96,28 +98,25 @@ import io.noties.markwon.linkify.LinkifyPlugin
 
 private sealed class MarkdownSegment {
     data class Text(val content: String) : MarkdownSegment()
-    data class Mermaid(val diagram: String, val encoded: String) : MarkdownSegment()
+    data class Mermaid(val diagram: String) : MarkdownSegment()
 }
 
 private fun splitMarkdownSegments(content: String): List<MarkdownSegment> {
     val segments = mutableListOf<MarkdownSegment>()
-    val regex = Regex("""```mermaid\s*\n(.*?)\n```""", RegexOption.DOT_MATCHES_ALL)
+    val regex = Regex("""```mermaid[^\n]*\r?\n(.*?)\r?\n[ \t]*```""", RegexOption.DOT_MATCHES_ALL)
     var lastEnd = 0
     for (match in regex.findAll(content)) {
         if (match.range.first > lastEnd) {
             segments.add(MarkdownSegment.Text(content.substring(lastEnd, match.range.first)))
         }
-        val diagram = match.groupValues[1].trim()
-        val encoded = android.util.Base64.encodeToString(
-            diagram.toByteArray(Charsets.UTF_8),
-            android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
-        )
-        segments.add(MarkdownSegment.Mermaid(diagram, encoded))
+        val diagram = match.groupValues[1].trim().replace("\r", "")
+        segments.add(MarkdownSegment.Mermaid(diagram))
         lastEnd = match.range.last + 1
     }
     if (lastEnd < content.length) {
         segments.add(MarkdownSegment.Text(content.substring(lastEnd)))
     }
+    android.util.Log.d("NablaNotes", "Segments: ${segments.size}, types: ${segments.map { it.javaClass.simpleName }}")
     return segments
 }
 
@@ -157,9 +156,10 @@ fun EditorScreen(
     }
 
     // Long-tap handler passed down to mermaid diagram composables
-    val onSaveToGallery: (String) -> Unit = { url ->
+    // Receives already-decoded PNG bytes from the bitmap in composable state
+    val onSaveToGallery: (ByteArray) -> Unit = { pngBytes ->
         coroutineScope.launch {
-            viewModel.saveSingleDiagram(url) { success ->
+            viewModel.saveSingleDiagram(pngBytes) { success ->
                 coroutineScope.launch {
                     snackbarHostState.showSnackbar(
                         if (success) "Diagrama guardado en galería" else "Error al guardar diagrama"
@@ -268,44 +268,75 @@ fun EditorScreen(
 
 // ── Mermaid diagram composable ────────────────────────────────────────────────
 
+// Shared OkHttpClient for mermaid POST requests — one instance, reused across composables
+private val mermaidHttpClient = OkHttpClient.Builder()
+    .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+    .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+    .build()
+
+/**
+ * Fetches a Mermaid diagram image via GET from mermaid.ink.
+ * Encodes the diagram as URL-safe Base64 and appends to the img endpoint.
+ * Returns PNG bytes on success, null on failure.
+ */
+private suspend fun fetchMermaidPng(diagram: String): ByteArray? = withContext(Dispatchers.IO) {
+    try {
+        val encoded = android.util.Base64.encodeToString(
+            diagram.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
+        )
+        val url = "https://mermaid.ink/img/$encoded"
+        android.util.Log.d("NablaNotes", "Fetching mermaid: URL length=${url.length}")
+        val request = Request.Builder().url(url).get().build()
+        mermaidHttpClient.newCall(request).execute().use { response ->
+            android.util.Log.d("NablaNotes", "Mermaid response: HTTP ${response.code}")
+            if (!response.isSuccessful) return@withContext null
+            response.body?.bytes()
+        }
+    } catch (e: Exception) {
+        android.util.Log.e("NablaNotes", "Mermaid fetch failed", e)
+        null
+    }
+}
+
 @Composable
 private fun MermaidDiagramView(
-    encoded: String,
-    onSaveToGallery: (String) -> Unit,
+    diagram: String,
+    onSaveToGallery: (ByteArray) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val url = "https://mermaid.ink/img/$encoded"
-    val context = LocalContext.current
-    var bitmap by remember(url) { mutableStateOf<Bitmap?>(null) }
-    var loadFailed by remember(url) { mutableStateOf(false) }
+    var bitmap by remember(diagram) { mutableStateOf<Bitmap?>(null) }
+    var loadFailed by remember(diagram) { mutableStateOf(false) }
     var showFullscreen by remember { mutableStateOf(false) }
+    // Cached PNG bytes so long-press save skips network re-fetch
+    var cachedPngBytes by remember(diagram) { mutableStateOf<ByteArray?>(null) }
 
-    LaunchedEffect(url) {
+    LaunchedEffect(diagram) {
         bitmap = null
         loadFailed = false
-        val appContext = context.applicationContext
-        val result = withContext(Dispatchers.IO) {
-            try {
-                Glide.with(appContext)
-                    .asBitmap()
-                    .load(url)
-                    .submit()
-                    .get()
-            } catch (_: Exception) {
-                null
+        cachedPngBytes = null
+        val pngBytes = fetchMermaidPng(diagram)
+        if (pngBytes != null) {
+            val decoded = BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.size)
+            if (decoded != null) {
+                cachedPngBytes = pngBytes
+                bitmap = decoded
+            } else {
+                loadFailed = true
             }
+        } else {
+            loadFailed = true
         }
-        if (result != null) bitmap = result else loadFailed = true
     }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 80.dp)
-            .pointerInput(url) {
+            .pointerInput(diagram) {
                 detectTapGestures(
                     onTap = { _ -> showFullscreen = true },
-                    onLongPress = { _ -> onSaveToGallery(url) }
+                    onLongPress = { _ -> cachedPngBytes?.let { onSaveToGallery(it) } }
                 )
             },
         contentAlignment = Alignment.Center
@@ -330,7 +361,7 @@ private fun MermaidDiagramView(
         bitmap?.let { bmp ->
             ZoomableImageDialog(
                 bitmap = bmp,
-                url = url,
+                pngBytes = cachedPngBytes,
                 onSaveToGallery = onSaveToGallery,
                 onDismiss = { showFullscreen = false }
             )
@@ -343,8 +374,8 @@ private fun MermaidDiagramView(
 @Composable
 private fun ZoomableImageDialog(
     bitmap: Bitmap,
-    url: String,
-    onSaveToGallery: (String) -> Unit,
+    pngBytes: ByteArray?,
+    onSaveToGallery: (ByteArray) -> Unit,
     onDismiss: () -> Unit
 ) {
     var scale by remember { mutableStateOf(1f) }
@@ -385,11 +416,11 @@ private fun ZoomableImageDialog(
                         translationY = offset.y
                     )
                     .transformable(transformableState)
-                    // Consume taps; long press saves to gallery
-                    .pointerInput(url) {
+                    // Consume taps; long press saves to gallery using cached PNG bytes
+                    .pointerInput(pngBytes) {
                         detectTapGestures(
                             onTap = { /* absorb — prevents dismiss */ },
-                            onLongPress = { _ -> onSaveToGallery(url) }
+                            onLongPress = { _ -> pngBytes?.let { onSaveToGallery(it) } }
                         )
                     }
             )
@@ -487,7 +518,7 @@ private fun MarkdownToolbar(
 @Composable
 private fun MarkdownPreview(
     content: String,
-    onSaveToGallery: (String) -> Unit,
+    onSaveToGallery: (ByteArray) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -557,7 +588,7 @@ private fun MarkdownPreview(
                 }
                 is MarkdownSegment.Mermaid -> {
                     MermaidDiagramView(
-                        encoded = segment.encoded,
+                        diagram = segment.diagram,
                         onSaveToGallery = onSaveToGallery,
                         modifier = Modifier
                             .fillMaxWidth()

@@ -26,6 +26,9 @@ app/src/main/res/raw/msal_config.json
 keystore.properties
 release.properties
 
+# Auto-generated version tracking (build-time, not committed)
+app/version.properties
+
 # Gradle caches
 .gradle/
 .kotlin/

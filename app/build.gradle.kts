@@ -1,4 +1,5 @@
 import java.util.Properties
+import java.time.LocalDate
 
 plugins {
     alias(libs.plugins.android.application)
@@ -14,6 +15,30 @@ val localProperties = Properties().apply {
     if (file.exists()) load(file.inputStream())
 }
 
+// Auto-increment version: YYYY.MM.DD.NN
+val versionPropsFile = file("version.properties")
+val today = LocalDate.now().toString() // "YYYY-MM-DD"
+val todayCompact = today.replace("-", "") // "YYYYMMDD"
+
+val versionProps = Properties()
+var buildNumber = 1
+if (versionPropsFile.exists()) {
+    versionProps.load(versionPropsFile.inputStream())
+    val lastDate = versionProps.getProperty("lastDate", "")
+    buildNumber = if (lastDate == today) {
+        versionProps.getProperty("buildNumber", "0").toInt() + 1
+    } else {
+        1
+    }
+}
+versionProps.setProperty("lastDate", today)
+versionProps.setProperty("buildNumber", buildNumber.toString())
+versionPropsFile.writer().use { versionProps.store(it, null) }
+
+val buildNN = buildNumber.toString().padStart(2, '0')
+val computedVersionCode = "$todayCompact$buildNN".toInt()
+val computedVersionName = "${today.replace("-", ".")}.${buildNN}"
+
 android {
     namespace = "com.nabla.notes"
     compileSdk = 34
@@ -22,8 +47,8 @@ android {
         applicationId = "com.nabla.notes"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2026052701
-        versionName = "2026.05.27.01"
+        versionCode = computedVersionCode
+        versionName = computedVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

@@ -19,6 +19,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import javax.inject.Inject
 
 /** UI state for the editor screen. */
@@ -228,17 +233,24 @@ class EditorViewModel @Inject constructor(
             var saved = 0
             var failed = 0
             withContext(Dispatchers.IO) {
-                val client = okhttp3.OkHttpClient()
+                // Use POST with JSON body — avoids GET URL length limits for large diagrams
+                val client = OkHttpClient()
+                val jsonMediaType = "application/json".toMediaType()
                 for ((index, diagram) in diagrams.withIndex()) {
                     try {
-                        val encoded = android.util.Base64.encodeToString(
-                            diagram.toByteArray(Charsets.UTF_8),
-                            android.util.Base64.NO_WRAP or android.util.Base64.URL_SAFE
-                        )
-                        val url = "https://mermaid.ink/img/$encoded"
-                        val request = okhttp3.Request.Builder().url(url).build()
-                        val bytes = client.newCall(request).execute().use { it.body?.bytes() }
-                            ?: throw Exception("Empty response")
+                        val json = JSONObject().apply {
+                            put("code", diagram)
+                            put("mermaid", JSONObject().apply { put("theme", "default") })
+                        }.toString()
+                        val body = json.toRequestBody(jsonMediaType)
+                        val request = Request.Builder()
+                            .url("https://mermaid.ink/img")
+                            .post(body)
+                            .build()
+                        val bytes = client.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) throw Exception("HTTP ${response.code}")
+                            response.body?.bytes()
+                        } ?: throw Exception("Empty response")
 
                         val filename = "mermaid_${System.currentTimeMillis()}_$index.png"
                         val values = android.content.ContentValues().apply {
@@ -301,18 +313,16 @@ class EditorViewModel @Inject constructor(
     }
 
     /**
-     * Download a single mermaid diagram image from [url] and save it to the gallery.
+     * Save already-fetched PNG [bytes] from a Mermaid diagram to the device gallery.
+     * Avoids a network re-fetch — the composable passes the cached bytes it received
+     * from the original POST to mermaid.ink.
      * Uses the injected application context — no Activity reference needed.
      */
-    fun saveSingleDiagram(url: String, onResult: (Boolean) -> Unit) {
+    fun saveSingleDiagram(bytes: ByteArray, onResult: (Boolean) -> Unit) {
         viewModelScope.launch {
             var success = false
             withContext(Dispatchers.IO) {
                 try {
-                    val client = okhttp3.OkHttpClient()
-                    val request = okhttp3.Request.Builder().url(url).build()
-                    val bytes = client.newCall(request).execute().use { it.body?.bytes() }
-                        ?: throw Exception("Empty response")
                     val filename = "mermaid_${System.currentTimeMillis()}.png"
                     val values = android.content.ContentValues().apply {
                         put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, filename)
