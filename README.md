@@ -7,13 +7,14 @@ A minimalist Android note-taking app backed by OneDrive. Write plain text and Ma
 ## Features
 
 - **OneDrive sync** — notes stored in a configurable OneDrive folder via Microsoft Graph API
-- **Markdown rendering** — live preview for `.md` files using Markwon (headings, bold, lists, code blocks, links)
-- **Mermaid diagrams** — render flowcharts, sequence diagrams, and more inline
-  - Fills full screen width
+- **Markdown rendering** — Markwon: headings, bold, lists, tables, checkboxes, strikethrough, links, code blocks
+- **Mermaid diagrams** — render flowcharts, sequence diagrams, and more inline (mermaid.ink)
   - Tap → fullscreen view with pinch-to-zoom
   - Long-press → save diagram as PNG to gallery
-- **Rich Markdown toolbar** — bold, italic, headings, lists, checkboxes, code blocks, tables, undo/redo
+- **Rich Markdown toolbar** — always-visible compact toolbar: bold, italic, headings, lists, checkboxes, code blocks, tables, undo/redo
 - **Autosave** — 2-second debounce, no save button needed
+- **Undo/redo** — full undo/redo stack in the editor
+- **Folder navigation** — browse OneDrive folder hierarchy
 - **Foldable / tablet support** — split-pane layout on medium/expanded window sizes
 - **MSAL authentication** — secure sign-in with Microsoft personal accounts
 - **Material You** — dynamic color on Android 12+
@@ -74,7 +75,7 @@ cp msal_config.template.json app/src/main/res/raw/msal_config.json
 
 ```bash
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# APK: app/build/outputs/apk/debug/com.nabla.notes-debug.apk
 ```
 
 ---
@@ -118,10 +119,10 @@ graph TD
 ```
 ````
 
-The diagram renders inline in the editor preview.
+The diagram renders inline via mermaid.ink.
 
 - **Single tap** → opens fullscreen view with pinch-to-zoom and a close button
-- **Long-press** → saves the diagram as a PNG to your device gallery ("Diagrama guardado en galería")
+- **Long-press** → saves the diagram as a PNG to your device gallery
 
 ---
 
@@ -166,8 +167,8 @@ app/src/main/kotlin/com/nabla/notes/
 | DI | Hilt |
 | Auth | MSAL 5.x |
 | Storage | Microsoft Graph API (OkHttp) |
-| Markdown | Markwon |
-| Diagrams | Mermaid.js (WebView) |
+| Markdown | Markwon (core, tables, tasklist, strikethrough, linkify, image) |
+| Diagrams | mermaid.ink (WebView) |
 | Async | Coroutines + StateFlow |
 | Architecture | MVVM + Repository |
 
@@ -178,12 +179,13 @@ app/src/main/kotlin/com/nabla/notes/
 - `msal_config.json` cannot use `BuildConfig` at runtime — the client ID must be a literal string. Update both `local.properties` and `msal_config.json` when changing environments.
 - Only `.txt` and `.md` files are shown in the browser. Configure the folder in Settings.
 - Gallery save requires no extra permissions on API 29+ (uses `MediaStore`).
+- New file dialog defaults to `YYYY-MM-DD_Note` filename format.
 
 ---
 
 ## Version
 
-`2026.05.27.01` (versionCode `2026052701`)
+`1.0`
 
 ---
 

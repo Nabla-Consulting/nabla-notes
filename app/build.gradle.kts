@@ -37,7 +37,7 @@ versionPropsFile.writer().use { versionProps.store(it, null) }
 
 val buildNN = buildNumber.toString().padStart(2, '0')
 val computedVersionCode = "$todayCompact$buildNN".toInt()
-val computedVersionName = "${today.replace("-", ".")}.${buildNN}"
+val computedVersionName = "1.0"
 
 android {
     namespace = "com.nabla.notes"
