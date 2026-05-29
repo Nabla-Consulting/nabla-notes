@@ -52,6 +52,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.remember
@@ -249,48 +251,45 @@ fun EditorScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp)
                             )
                         } else {
-                            Box(modifier = Modifier.weight(1f)) {
-                                NoteEditor(
-                                    textFieldValue = textFieldValue,
-                                    onValueChange = { viewModel.updateTextFieldValue(it, activity) },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .background(MaterialTheme.colorScheme.surface)
-                                )
-                                // Transparent right-edge swipe zone to show toolbar
-                                if (!toolbarVisible) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.CenterEnd)
-                                            .fillMaxSize()
-                                            .pointerInput(Unit) {
-                                                detectHorizontalDragGestures { _, dragAmount ->
-                                                    if (dragAmount > 40f) toolbarVisible = true
-                                                }
-                                            }
+                            NoteEditor(
+                                textFieldValue = textFieldValue,
+                                onValueChange = { viewModel.updateTextFieldValue(it, activity) },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(MaterialTheme.colorScheme.surface)
+                            )
+                            // Toolbar row: collapse button on left + toolbar (animated)
+                            androidx.compose.foundation.layout.Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                // Toggle button: < to collapse, > to expand
+                                TextButton(
+                                    onClick = { toolbarVisible = !toolbarVisible },
+                                    modifier = Modifier.defaultMinSize(minWidth = 32.dp, minHeight = 40.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                                ) {
+                                    Text(
+                                        text = if (toolbarVisible) "<" else ">",
+                                        style = MaterialTheme.typography.labelLarge
                                     )
                                 }
-                            }
-                            // Collapsible toolbar: swipe left to hide, swipe right (from edge) to show
-                            AnimatedVisibility(
-                                visible = toolbarVisible,
-                                enter = slideInVertically(initialOffsetY = { it }),
-                                exit = slideOutVertically(targetOffsetY = { it })
-                            ) {
-                                MarkdownToolbar(
-                                    onAction = { action ->
-                                        when (action) {
-                                            MarkdownAction.UNDO -> viewModel.undo()
-                                            MarkdownAction.REDO -> viewModel.redo()
-                                            else -> viewModel.insertMarkdown(action)
+                                AnimatedVisibility(
+                                    visible = toolbarVisible,
+                                    enter = slideInHorizontally(initialOffsetX = { -it }),
+                                    exit = slideOutHorizontally(targetOffsetX = { -it }),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    MarkdownToolbar(
+                                        onAction = { action ->
+                                            when (action) {
+                                                MarkdownAction.UNDO -> viewModel.undo()
+                                                MarkdownAction.REDO -> viewModel.redo()
+                                                else -> viewModel.insertMarkdown(action)
+                                            }
                                         }
-                                    },
-                                    modifier = Modifier.pointerInput(Unit) {
-                                        detectHorizontalDragGestures { _, dragAmount ->
-                                            if (dragAmount < -40f) toolbarVisible = false
-                                        }
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
