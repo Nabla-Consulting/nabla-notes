@@ -7,7 +7,6 @@ import android.text.style.BackgroundColorSpan
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -51,14 +50,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -237,9 +230,6 @@ fun EditorScreen(
                 is EditorUiState.Ready,
                 is EditorUiState.Saving,
                 is EditorUiState.Saved -> {
-                    var toolbarVisible by rememberSaveable { mutableStateOf(true) }
-                    // imePadding on Column: the whole column shifts up with the keyboard,
-                    // so the toolbar lands right above it with no extra space.
                     Column(modifier = Modifier.fillMaxSize().imePadding()) {
                         if (isMarkdownPreview) {
                             MarkdownPreview(
@@ -258,39 +248,15 @@ fun EditorScreen(
                                     .weight(1f)
                                     .background(MaterialTheme.colorScheme.surface)
                             )
-                            // Toolbar row: collapse button on left + toolbar (animated)
-                            androidx.compose.foundation.layout.Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                // Toggle button: < to collapse, > to expand
-                                TextButton(
-                                    onClick = { toolbarVisible = !toolbarVisible },
-                                    modifier = Modifier.defaultMinSize(minWidth = 32.dp, minHeight = 40.dp),
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
-                                ) {
-                                    Text(
-                                        text = if (toolbarVisible) "<" else ">",
-                                        style = MaterialTheme.typography.labelLarge
-                                    )
+                            MarkdownToolbar(
+                                onAction = { action ->
+                                    when (action) {
+                                        MarkdownAction.UNDO -> viewModel.undo()
+                                        MarkdownAction.REDO -> viewModel.redo()
+                                        else -> viewModel.insertMarkdown(action)
+                                    }
                                 }
-                                AnimatedVisibility(
-                                    visible = toolbarVisible,
-                                    enter = slideInHorizontally(initialOffsetX = { -it }),
-                                    exit = slideOutHorizontally(targetOffsetX = { -it }),
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    MarkdownToolbar(
-                                        onAction = { action ->
-                                            when (action) {
-                                                MarkdownAction.UNDO -> viewModel.undo()
-                                                MarkdownAction.REDO -> viewModel.redo()
-                                                else -> viewModel.insertMarkdown(action)
-                                            }
-                                        }
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                 }
@@ -526,19 +492,20 @@ private fun MarkdownToolbar(
         shadowElevation = 4.dp
     ) {
         LazyRow(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             items(MarkdownAction.entries.toList()) { action ->
                 TextButton(
                     onClick = { onAction(action) },
-                    modifier = Modifier.defaultMinSize(minWidth = 40.dp, minHeight = 36.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp)
+                    modifier = Modifier.defaultMinSize(minWidth = 30.dp, minHeight = 27.dp),
+                    contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                 ) {
                     Text(
                         text = action.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontFamily = if (action == MarkdownAction.CODE_BLOCK) FontFamily.Monospace else FontFamily.Default
+                        style = MaterialTheme.typography.labelMedium.copy(fontSize = 15.sp),
+                        fontFamily = if (action == MarkdownAction.CODE_BLOCK) FontFamily.Monospace else FontFamily.Default,
+                        lineHeight = 27.sp
                     )
                 }
             }
