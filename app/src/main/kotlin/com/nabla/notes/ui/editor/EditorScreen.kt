@@ -454,7 +454,10 @@ private fun NoteEditor(
     BasicTextField(
         value = textFieldValue,
         onValueChange = onValueChange,
+        // Fix: fillMaxSize() ensures the tappable area covers the full viewport so tapping
+        // past the last character on any line still hits the field and places the cursor.
         modifier = modifier
+            .fillMaxSize()
             .verticalScroll(scrollState)
             .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 16.dp),
         textStyle = TextStyle(
