@@ -2,6 +2,7 @@ package com.nabla.notes.ui.editor
 
 import android.app.Activity
 import android.graphics.Bitmap
+import android.text.method.LinkMovementMethod
 import android.widget.TextView
 import android.text.style.BackgroundColorSpan
 import androidx.compose.foundation.Image
@@ -580,10 +581,16 @@ private fun MarkdownPreview(
                                     setPadding(0, 0, 0, 0)
                                     textSize = 15f
                                     setTextIsSelectable(true)
+                                    // Enable link clicks: without this, URLSpan.onClick() is never
+                                    // called and taps on hyperlinks do nothing.
+                                    movementMethod = LinkMovementMethod.getInstance()
                                 }
                             },
                             update = { textView ->
                                 markwon.setMarkdown(textView, segment.content)
+                                // Re-apply after Markwon sets text in case it resets the movement method.
+                                // Also re-wrap text as SpannableString so spans survive setTextIsSelectable.
+                                textView.movementMethod = LinkMovementMethod.getInstance()
                             },
                             modifier = Modifier.fillMaxWidth()
                         )
