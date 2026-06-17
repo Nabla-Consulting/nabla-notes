@@ -103,6 +103,13 @@ android {
             excludes += "/META-INF/DEPENDENCIES"
         }
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            isReturnDefaultValues = true
+        }
+    }
 }
 
 dependencies {
@@ -155,4 +162,12 @@ dependencies {
 
     // DataStore
     implementation(libs.datastore.preferences)
+
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("io.mockk:mockk:1.13.10")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("androidx.datastore:datastore-preferences:1.1.1")
+    testImplementation("androidx.test:core-ktx:1.5.0")
+    testImplementation("org.robolectric:robolectric:4.12.1")
 }

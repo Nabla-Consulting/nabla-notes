@@ -70,6 +70,22 @@ class BrowserViewModel @Inject constructor(
     private val _folderStack = MutableStateFlow<List<Pair<String, String>>>(emptyList())
     val folderStack: StateFlow<List<Pair<String, String>>> = _folderStack.asStateFlow()
 
+    init {
+        // Restore last folder stack from DataStore on launch.
+        viewModelScope.launch {
+            val savedStack = settingsRepository.loadLastFolderStack()
+            if (savedStack.isNotEmpty()) {
+                _folderStack.value = savedStack
+            }
+        }
+        // Persist stack whenever it changes so the next launch can restore it.
+        viewModelScope.launch {
+            _folderStack.collect { stack ->
+                settingsRepository.saveLastFolderStack(stack)
+            }
+        }
+    }
+
     /**
      * Breadcrumb path derived from the folder stack and settings.
      * Example: "OneDrive / Notes / 2026"
