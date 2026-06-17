@@ -319,12 +319,31 @@ class OneDriveRepository @Inject constructor(
                 }
             }
 
-            // Folders first (alphabetically), then files (alphabetically)
+            // Folders first (alphabetically), then files by lastModified descending (newest first)
             entries.sortWith(
-                compareBy(
-                    { it is BrowserEntry.File },
-                    { it.displayName.lowercase() }
-                )
+                Comparator { a, b ->
+                    val aIsFile = a is BrowserEntry.File
+                    val bIsFile = b is BrowserEntry.File
+                    // Folders before files
+                    if (aIsFile != bIsFile) return@Comparator aIsFile.compareTo(bIsFile)
+                    when {
+                        // Both folders: alphabetical
+                        a is BrowserEntry.Folder && b is BrowserEntry.Folder ->
+                            a.item.name.lowercase().compareTo(b.item.name.lowercase())
+                        // Both files: newest first; blank lastModified goes last
+                        a is BrowserEntry.File && b is BrowserEntry.File -> {
+                            val tsA = a.note.lastModified
+                            val tsB = b.note.lastModified
+                            when {
+                                tsA.isBlank() && tsB.isBlank() -> a.note.name.lowercase().compareTo(b.note.name.lowercase())
+                                tsA.isBlank() -> 1
+                                tsB.isBlank() -> -1
+                                else -> tsB.compareTo(tsA) // ISO-8601 desc sort
+                            }
+                        }
+                        else -> 0
+                    }
+                }
             )
             Log.d(TAG, "Found ${entries.size} entries (folders+files)")
             Result.success(entries)
